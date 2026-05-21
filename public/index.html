@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { background: #000; margin: 0; padding: 20px; font-family: monospace; overflow: hidden; }
+    #terminal { height: 100vh; width: 100vw; }
+    
+    /* The AI Input Overlay */
+    #ai-prompt-bar {
+      display: none;
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      background: #1e1e1e;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 10px 15px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      z-index: 100;
+    }
+    #ai-input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: #00ffcc;
+      font-size: 16px;
+      font-family: monospace;
+      outline: none;
+    }
+    #ai-input::placeholder { color: #555; }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+  
+  <div id="ai-prompt-bar">
+    <input type="text" id="ai-input" autocomplete="off" placeholder="Ask AI (e.g., 'how to find large files') ... Press Esc to cancel">
+  </div>
+
+  <script>
+    const term = new Terminal({ cursorBlink: true, theme: { background: '#1e1e1e' } });
+    term.open(document.getElementById('terminal'));
+    const socket = io();
+
+    // UI Elements
+    const aiBar = document.getElementById('ai-prompt-bar');
+    const aiInput = document.getElementById('ai-input');
+    let isAiMode = false;
+
+    // 1. Intercept specific keystrokes
+    term.onKey(e => {
+      const ev = e.domEvent;
+      // Trigger on Ctrl + Space
+      if (ev.ctrlKey && ev.code === 'Space') {
+        isAiMode = true;
+        aiBar.style.display = 'block';
+        aiInput.focus();
+        ev.preventDefault();
+      }
+    });
+
+    // 2. Route normal typing
+    term.onData(data => {
+      if (!isAiMode) {
+        socket.emit('input', data);
+      }
+    });
+
+    // 3. Handle the AI Prompt lifecycle
+    aiInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const query = aiInput.value;
+        if (query.trim() !== '') {
+          // Send natural language to the new backend route
+          socket.emit('ai-request', query); 
+        }
+        closeAiBar();
+      } else if (e.key === 'Escape') {
+        closeAiBar();
+      }
+    });
+
+    function closeAiBar() {
+      aiInput.value = '';
+      aiBar.style.display = 'none';
+      isAiMode = false;
+      term.focus(); // Return focus to the terminal
+    }
+
+    // Standard output rendering
+    socket.on('output', data => {
+      term.write(data);
+    });
+  </script>
+</body>
+</html>
+
+
+<!-- <!DOCTYPE html>
+<html>
+<head>
+  <title>AI Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { background: #000; margin: 0; padding: 20px; }
+    #terminal { height: 100vh; width: 100vw; }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+  <script>
+    // Initialize xterm.js
+    const term = new Terminal({ 
+        cursorBlink: true,
+        theme: { background: '#1e1e1e' }
+    });
+    term.open(document.getElementById('terminal'));
+
+    const socket = io();
+
+    // 1. Capture keystrokes and send them to the backend
+    term.onData(data => {
+      socket.emit('input', data);
+    });
+
+    // 2. Receive text from the backend and draw it
+    socket.on('output', data => {
+      term.write(data);
+    });
+  </script>
+</body>
+</html> -->
