@@ -2,6 +2,7 @@
 require('dotenv').config();
 const os = require('os');
 const fs = require('fs');
+const path = require('path');
 const { exec } = require('child_process');
 const pty = require('node-pty');
 const express = require('express');
@@ -12,22 +13,26 @@ const Database = require('better-sqlite3');
 const { getLocalContext } = require('./rag.js');
 
 // =====================================================================
-// --- 1. SYSTEM OS DETECTION ---
+// --- 1. CROSS-PLATFORM OS DETECTION ---
 // =====================================================================
-let hostOS = 'linux';
-try {
-  // Sniff the true Linux distribution from the system files
-  const osRelease = fs.readFileSync('/etc/os-release', 'utf8');
-  const match = osRelease.match(/^ID=([^\n]+)/m);
-  if (match) hostOS = match[1].replace(/"/g, ''); // e.g., 'manjaro', 'ubuntu'
-} catch (e) {}
+let hostOS = os.platform(); // 'linux', 'darwin', 'win32'
+
+// On Linux, try to detect the specific distro
+if (hostOS === 'linux') {
+  try {
+    const osRelease = fs.readFileSync('/etc/os-release', 'utf8');
+    const match = osRelease.match(/^ID=([^\n]+)/m);
+    if (match) hostOS = match[1].replace(/"/g, ''); // e.g., 'manjaro', 'ubuntu'
+  } catch (e) {}
+}
 
 console.log(`[SYSTEM]: Detected Host OS as '${hostOS}'`);
 
 // =====================================================================
 // --- 2. DUAL-CACHE SQLITE INITIALIZATION ---
 // =====================================================================
-const db = new Database('cache.db');
+const dbPath = path.join(__dirname, 'cache.db');
+const db = new Database(dbPath);
 
 db.exec(`
   -- Table 1: The Cross-Distro & Query Cache
@@ -56,19 +61,38 @@ const checkAutofix = db.prepare('SELECT fixed_command FROM autofix_cache WHERE e
 const saveAutofix = db.prepare('INSERT OR REPLACE INTO autofix_cache (error_signature, os_name, fixed_command) VALUES (?, ?, ?)');
 
 // =====================================================================
-// --- 3. PTY MASTER PROCESS ---
+// --- 3. CROSS-PLATFORM PTY MASTER PROCESS ---
 // =====================================================================
-const shell = 'bash';
+const isWindows = os.platform() === 'win32';
+const shell = isWindows
+  ? 'powershell.exe'
+  : (process.env.SHELL || 'bash');
+
 const ptyProcess = pty.spawn(shell, [], {
   name: 'xterm-color',
   cols: 80,
   rows: 30,
-  cwd: process.env.HOME,
+  cwd: isWindows ? process.env.USERPROFILE : process.env.HOME,
   env: process.env
 });
 
 // =====================================================================
-// --- 4. AI AUTO-FIXER ENGINE (WITH SANITIZATION) ---
+// --- 4. CROSS-PLATFORM CWD DETECTION ---
+// =====================================================================
+function getCurrentDirectory() {
+  // On Linux, read the /proc symlink for the true cwd of the shell process
+  if (os.platform() === 'linux') {
+    try {
+      return fs.readlinkSync(`/proc/${ptyProcess.pid}/cwd`);
+    } catch (e) {}
+  }
+  // On macOS, try lsof (slower but works)
+  // On Windows and fallback, use the node process cwd or home dir
+  return isWindows ? (process.env.USERPROFILE || process.cwd()) : (process.env.HOME || process.cwd());
+}
+
+// =====================================================================
+// --- 5. AI AUTO-FIXER ENGINE (WITH SANITIZATION) ---
 // =====================================================================
 async function autoFixError(errorBuffer, currentDirectory, io) {
   // 1. NUKE ALL INVISIBLE TERMINAL GHOSTS (ANSI Codes & Carriage Returns)
@@ -76,11 +100,21 @@ async function autoFixError(errorBuffer, currentDirectory, io) {
   cleanBuffer = cleanBuffer.replace(/\r/g, ''); // Strip carriage returns
 
   // 2. CREATE A BULLETPROOF CACHE KEY
-  const cleanLines = cleanBuffer.split('\n').map(line => line.trim());
-  const errorLines = cleanLines.filter(line => /command not found|command not f ound|Error:|ERR!|fatal:|Traceback|Exception/i.test(line));
+  const cleanLines = cleanBuffer.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+  const errorPattern = /command not found|is not recognized|cannot be loaded|Error:|ERR!|fatal:|Traceback|Exception/i;
+  const errorLines = cleanLines.filter(line => errorPattern.test(line));
   
-  // Extract ONLY the exact line containing the error to ignore sudo noise
-  const errorSignature = errorLines.length > 0 ? errorLines.pop() : cleanBuffer.trim().slice(-100);
+  // Build a specific signature: use the FIRST error line (describes WHAT failed)
+  // rather than the last (which is often a generic error type like CommandNotFoundException).
+  // For PowerShell: "apt : The term 'apt' is not recognized..." is more specific than "CommandNotFoundException"
+  // For bash: "bash: gitt: command not found" is already specific
+  let errorSignature;
+  if (errorLines.length > 0) {
+    // Use the first error-matching line (the descriptive one), truncated to a reasonable key
+    errorSignature = errorLines[0].slice(0, 150);
+  } else {
+    errorSignature = cleanBuffer.trim().slice(-150);
+  }
 
   // 3. CHECK THE TYPO CACHE FIRST
   const cachedFix = checkAutofix.get(errorSignature, hostOS);
@@ -114,7 +148,18 @@ async function autoFixError(errorBuffer, currentDirectory, io) {
       })
     });
 
+    if (!response.ok) {
+      console.error(`[AUTO-FIX FAILED]: Gemini API returned HTTP ${response.status}: ${response.statusText}`);
+      return;
+    }
+
     const data = await response.json();
+
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      console.error("[AUTO-FIX FAILED]: Unexpected API response structure:", JSON.stringify(data).slice(0, 200));
+      return;
+    }
+
     let fixCommand = data.candidates[0].content.parts[0].text.trim();
     fixCommand = fixCommand.replace(/^```[a-z]*\n/gi, '').replace(/\n```$/g, '').trim();
 
@@ -133,7 +178,7 @@ async function autoFixError(errorBuffer, currentDirectory, io) {
 }
 
 // =====================================================================
-// --- 5. PTY DATA STREAM (ERROR SNIFFER) ---
+// --- 6. PTY DATA STREAM (ERROR SNIFFER) ---
 // =====================================================================
 let terminalBuffer = "";
 let errorDebounceTimer = null;
@@ -149,7 +194,7 @@ ptyProcess.onData(data => {
   }
 
   // Sniff for common error patterns
-  const errorPatterns = /command not found|command not f ound|Error:|ERR!|fatal:|Traceback|Exception/i;
+  const errorPatterns = /command not found|command not f ound|is not recognized|cannot be loaded|Error:|ERR!|fatal:|Traceback|Exception/i;
 
   if (errorPatterns.test(data)) {
     clearTimeout(errorDebounceTimer);
@@ -158,11 +203,7 @@ ptyProcess.onData(data => {
     errorDebounceTimer = setTimeout(() => {
       console.log("[AUTO-FIX TRIGGERED] Analyzing error buffer...");
 
-      // Grab the true directory so the AI knows where the error happened
-      let currentDir = process.env.HOME;
-      try {
-        currentDir = fs.readlinkSync(`/proc/${ptyProcess.pid}/cwd`);
-      } catch (e) {}
+      const currentDir = getCurrentDirectory();
 
       // Fire the auto-fixer
       autoFixError(terminalBuffer, currentDir, io);
@@ -174,8 +215,53 @@ ptyProcess.onData(data => {
 });
 
 // =====================================================================
-// --- 6. WEBSOCKET CONNECTION (CLIENT UI) ---
+// --- 7. WEBSOCKET CONNECTION (CLIENT UI) ---
 // =====================================================================
+
+// Helper: parse text tokens from Gemini streaming JSON chunks
+function extractTextFromStreamChunk(chunkString) {
+  const parts = [];
+  // The streaming API returns an array of JSON objects; chunks may be partial
+  // We accumulate and try to parse individual JSON array elements
+  try {
+    // Try to extract complete JSON objects with "text" fields
+    const jsonArray = JSON.parse(chunkString);
+    if (Array.isArray(jsonArray)) {
+      for (const item of jsonArray) {
+        if (item.candidates) {
+          for (const candidate of item.candidates) {
+            if (candidate.content && candidate.content.parts) {
+              for (const part of candidate.content.parts) {
+                if (part.text) parts.push(part.text);
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // If full JSON parse fails, try extracting individual objects
+    // The stream often sends partial arrays like: [{\n...},\n{...
+    // Fall back to regex but with a more robust pattern
+    const textMatches = chunkString.match(/"text":\s*"((?:[^"\\]|\\.)*)"/g);
+    if (textMatches) {
+      for (const match of textMatches) {
+        try {
+          // Parse the extracted key-value as proper JSON to handle escapes
+          const parsed = JSON.parse(`{${match}}`);
+          if (parsed.text) parts.push(parsed.text);
+        } catch (parseErr) {
+          // Last resort: manual extraction
+          let textPart = match.replace(/"text":\s*"/, '').slice(0, -1);
+          textPart = textPart.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+          parts.push(textPart);
+        }
+      }
+    }
+  }
+  return parts;
+}
+
 io.on('connection', (socket) => {
   console.log('Frontend connected to PTY');
   
@@ -183,6 +269,16 @@ io.on('connection', (socket) => {
   ptyProcess.write('clear\r');
 
   socket.on('input', data => { ptyProcess.write(data); });
+
+  // Handle terminal resize from the frontend
+  socket.on('resize', ({ cols, rows }) => {
+    try {
+      ptyProcess.resize(cols, rows);
+      console.log(`[PTY] Resized to ${cols}x${rows}`);
+    } catch (e) {
+      console.error('[PTY] Resize failed:', e.message);
+    }
+  });
 
   // --- THE INTENTIONAL AI QUERY ROUTE ---
   socket.on('ai-request', async (query) => {
@@ -206,11 +302,7 @@ io.on('connection', (socket) => {
     try {
       console.log(`[CACHE MISS]: Asking Gemini with Stream...`);
 
-      // Get True Directory
-      let currentDir = process.env.HOME;
-      try {
-        currentDir = fs.readlinkSync(`/proc/${ptyProcess.pid}/cwd`);
-      } catch (e) {}
+      const currentDir = getCurrentDirectory();
 
       // Fetch RAG Context
       const localContext = await getLocalContext(query, currentDir);
@@ -229,6 +321,13 @@ io.on('connection', (socket) => {
         })
       });
 
+      if (!response.ok) {
+        const errBody = await response.text();
+        console.error(`[API ERROR]: Gemini returned HTTP ${response.status}: ${errBody.slice(0, 200)}`);
+        ptyProcess.write(`echo 'API Error: HTTP ${response.status}'\r`);
+        return;
+      }
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let fullGeneratedCommand = "";
@@ -239,41 +338,45 @@ io.on('connection', (socket) => {
         if (done) break;
 
         const chunkString = decoder.decode(value, { stream: true });
-        const textMatches = chunkString.match(/"text":\s*"([^"]+)"/g);
+        const textParts = extractTextFromStreamChunk(chunkString);
         
-        if (textMatches) {
-           for (const match of textMatches) {
-               let textPart = match.replace(/"text":\s*"/, '').slice(0, -1);
-               textPart = textPart.replace(/\\n/g, '\n').replace(/\\"/g, '"');
-
-               ptyProcess.write(textPart);
-               fullGeneratedCommand += textPart;
-           }
+        for (const textPart of textParts) {
+          ptyProcess.write(textPart);
+          fullGeneratedCommand += textPart;
         }
       }
 
       // 2. CLEANUP AND SAVE TO TRANSLATION CACHE
       fullGeneratedCommand = fullGeneratedCommand.replace(/^```[a-z]*\n/gi, '').replace(/\n```$/g, '').trim();
-      saveTranslation.run(normalizedQuery, hostOS, fullGeneratedCommand);
-      console.log(`[SAVED TO CACHE]: Mapped "${normalizedQuery}" for OS '${hostOS}'`);
+      if (fullGeneratedCommand) {
+        saveTranslation.run(normalizedQuery, hostOS, fullGeneratedCommand);
+        console.log(`[SAVED TO CACHE]: Mapped "${normalizedQuery}" for OS '${hostOS}'`);
+      }
 
     } catch (error) {
       console.error("API Error:", error.message);
       ptyProcess.write(`echo 'API Failed: ${error.message}'\r`);
     }
   });
+
+  // Cleanup on disconnect
+  socket.on('disconnect', () => {
+    console.log('Frontend disconnected from PTY');
+  });
 });
 
 // =====================================================================
-// --- 7. EXPRESS SERVER STARTUP & AUTO-LAUNCH ---
+// --- 8. EXPRESS SERVER STARTUP & AUTO-LAUNCH ---
 // =====================================================================
 app.use(express.static('public'));
 
-server.listen(3000, () => {
-  console.log('✨ AI Terminal Engine running on http://localhost:3000');
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, () => {
+  console.log(`✨ AI Terminal Engine running on http://localhost:${PORT}`);
 
   // Cross-platform browser auto-launch
-  const url = 'http://localhost:3000';
+  const url = `http://localhost:${PORT}`;
   const startCommand = process.platform === 'darwin' ? 'open'
                      : process.platform === 'win32' ? 'start'
                      : 'xdg-open';
