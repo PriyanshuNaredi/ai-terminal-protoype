@@ -1,1 +1,0 @@
-To launch the database schema, run: sqlite3 custom_db.db < schema.sql
