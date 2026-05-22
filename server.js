@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 require('dotenv').config();
 const os = require('os');
 const fs = require('fs');
@@ -8,6 +9,7 @@ const server = require('http').createServer(app);
 const io = require('socket.io')(server);
 const Database = require('better-sqlite3');
 const { getLocalContext } = require('./rag.js');
+const { exec } = require('child_process');
 
 // =====================================================================
 // --- 1. SYSTEM OS DETECTION ---
@@ -205,10 +207,24 @@ io.on('connection', (socket) => {
 });
 
 // =====================================================================
-// --- 7. EXPRESS SERVER STARTUP ---
+// --- 7. EXPRESS SERVER STARTUP & AUTO-LAUNCH ---
 // =====================================================================
 app.use(express.static('public'));
 
 server.listen(3000, () => {
-  console.log('AI Terminal Engine running on http://localhost:3000');
+  console.log('✨ AI Terminal Engine running on http://localhost:3000');
+  
+  // Cross-platform browser launch
+  const url = 'http://localhost:3000';
+  const startCommand = process.platform === 'darwin' ? 'open'
+                     : process.platform === 'win32' ? 'start'
+                     : 'xdg-open'; // Standard for Manjaro/Linux
+
+  exec(`${startCommand} ${url}`, (err) => {
+    if (err) {
+      console.log(`[SYSTEM] Could not auto-launch browser. Please open ${url} manually.`);
+    } else {
+      console.log(`[SYSTEM] Auto-launching browser...`);
+    }
+  });
 });
