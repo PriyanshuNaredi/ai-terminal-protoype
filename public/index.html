@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Terminal Engine</title>
-  <meta name="description" content="AI-powered terminal emulator with auto-fix, cross-platform translation, and RAG context awareness.">
+  <meta name="description" content="AI-powered multi-terminal emulator with auto-fix and cross-platform translation.">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,38 +13,39 @@
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <style>
-    *, *::before, *::after {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg-primary: #0a0e17;
-      --bg-secondary: #111827;
-      --bg-tertiary: #1a2235;
-      --bg-glass: rgba(17, 24, 39, 0.75);
-      --border-primary: rgba(99, 102, 241, 0.2);
-      --border-glow: rgba(99, 102, 241, 0.4);
-      --accent-primary: #6366f1;
-      --accent-secondary: #818cf8;
-      --accent-glow: rgba(99, 102, 241, 0.15);
-      --accent-green: #34d399;
-      --accent-green-glow: rgba(52, 211, 153, 0.15);
-      --accent-amber: #fbbf24;
-      --accent-red: #f87171;
-      --accent-cyan: #22d3ee;
+      --bg-deep: #06090f;
+      --bg-primary: #0b1120;
+      --bg-secondary: #111a2e;
+      --bg-elevated: #162038;
+      --bg-surface: #1a2744;
+      --bg-hover: rgba(99, 102, 241, 0.08);
+      --border-subtle: rgba(99, 102, 241, 0.12);
+      --border-medium: rgba(99, 102, 241, 0.22);
+      --border-accent: rgba(99, 102, 241, 0.45);
+      --accent: #6366f1;
+      --accent-light: #818cf8;
+      --accent-glow: rgba(99, 102, 241, 0.2);
+      --cyan: #22d3ee;
+      --green: #34d399;
+      --green-dim: rgba(52, 211, 153, 0.15);
+      --amber: #fbbf24;
+      --red: #f87171;
+      --rose: #fb7185;
       --text-primary: #e2e8f0;
       --text-secondary: #94a3b8;
       --text-muted: #475569;
-      --terminal-bg: #0d1117;
-      --shadow-lg: 0 25px 60px -12px rgba(0, 0, 0, 0.5);
-      --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.08);
+      --text-dim: #334155;
+      --terminal-bg: #0a0f1a;
+      --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
     body {
-      background: var(--bg-primary);
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-deep);
+      font-family: var(--font-ui);
       color: var(--text-primary);
       overflow: hidden;
       height: 100vh;
@@ -52,218 +53,148 @@
       flex-direction: column;
     }
 
-    /* ===== HEADER BAR ===== */
+    /* ============ HEADER ============ */
     .header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 20px;
-      height: 48px;
+      padding: 0 16px;
+      height: 42px;
       background: var(--bg-secondary);
-      border-bottom: 1px solid var(--border-primary);
+      border-bottom: 1px solid var(--border-subtle);
       flex-shrink: 0;
       position: relative;
-      z-index: 10;
-      -webkit-app-region: drag;
+      z-index: 50;
     }
 
     .header::after {
       content: '';
       position: absolute;
-      bottom: -1px;
+      bottom: 0;
       left: 0;
       right: 0;
       height: 1px;
-      background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
-      opacity: 0.5;
-    }
-
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
+      background: linear-gradient(90deg, transparent 5%, var(--accent) 50%, transparent 95%);
+      opacity: 0.35;
     }
 
     .logo {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       font-weight: 700;
-      font-size: 14px;
+      font-size: 13px;
       letter-spacing: -0.02em;
+      user-select: none;
     }
 
     .logo-icon {
-      width: 24px;
-      height: 24px;
-      background: linear-gradient(135deg, var(--accent-primary), var(--accent-cyan));
-      border-radius: 6px;
+      width: 26px;
+      height: 26px;
+      background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+      border-radius: 7px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 13px;
-      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+      font-size: 14px;
+      box-shadow: 0 2px 12px rgba(99, 102, 241, 0.35), inset 0 1px 0 rgba(255,255,255,0.15);
     }
 
     .logo-text {
-      background: linear-gradient(135deg, var(--text-primary), var(--accent-secondary));
+      background: linear-gradient(135deg, #e2e8f0 30%, #818cf8 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
 
-    .header-center {
+    .header-actions {
       display: flex;
       align-items: center;
-      gap: 16px;
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
+      gap: 6px;
     }
+
+    .btn-ai {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 7px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(6,182,212,0.08));
+      border: 1px solid var(--border-medium);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: var(--font-ui);
+    }
+
+    .btn-ai:hover {
+      color: var(--text-primary);
+      border-color: var(--border-accent);
+      background: linear-gradient(135deg, rgba(99,102,241,0.18), rgba(6,182,212,0.12));
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.12);
+    }
+
+    .btn-ai kbd {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    /* ============ TAB BAR ============ */
+    .tabbar {
+      display: flex;
+      align-items: stretch;
+      height: 36px;
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+      padding: 0 4px;
+      gap: 1px;
+      overflow-x: auto;
+      position: relative;
+      z-index: 40;
+    }
+
+    .tabbar::-webkit-scrollbar { height: 0; }
 
     .tab {
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 6px 14px;
-      border-radius: 6px;
-      font-size: 12px;
+      gap: 7px;
+      padding: 0 14px;
+      min-width: 120px;
+      max-width: 180px;
+      font-size: 11.5px;
       font-weight: 500;
-      color: var(--text-secondary);
+      color: var(--text-muted);
       background: transparent;
-      border: 1px solid transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: all 0.15s ease;
+      position: relative;
+      font-family: var(--font-ui);
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .tab:hover {
+      color: var(--text-secondary);
+      background: var(--bg-hover);
     }
 
     .tab.active {
       color: var(--text-primary);
-      background: var(--bg-tertiary);
-      border-color: var(--border-primary);
-    }
-
-    .tab:hover:not(.active) {
-      color: var(--text-primary);
-      background: rgba(255, 255, 255, 0.03);
+      border-bottom-color: var(--accent);
+      background: var(--bg-secondary);
     }
 
     .tab-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--accent-green);
-      box-shadow: 0 0 6px var(--accent-green);
-    }
-
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .header-btn {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 10px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 500;
-      color: var(--text-secondary);
-      background: transparent;
-      border: 1px solid var(--border-primary);
-      cursor: pointer;
-      transition: all 0.2s ease;
-      font-family: inherit;
-    }
-
-    .header-btn:hover {
-      color: var(--text-primary);
-      border-color: var(--border-glow);
-      background: var(--accent-glow);
-    }
-
-    .header-btn kbd {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      padding: 1px 4px;
-      border-radius: 3px;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    /* ===== TERMINAL CONTAINER ===== */
-    .terminal-wrapper {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      position: relative;
-    }
-
-    #terminal {
-      flex: 1;
-      padding: 8px 4px 0 12px;
-      background: var(--terminal-bg);
-    }
-
-    .xterm {
-      padding: 0;
-    }
-
-    /* Custom scrollbar for terminal */
-    .xterm-viewport::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    .xterm-viewport::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    .xterm-viewport::-webkit-scrollbar-thumb {
-      background: rgba(99, 102, 241, 0.2);
-      border-radius: 4px;
-    }
-
-    .xterm-viewport::-webkit-scrollbar-thumb:hover {
-      background: rgba(99, 102, 241, 0.4);
-    }
-
-    /* ===== STATUS BAR ===== */
-    .statusbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 12px;
-      height: 28px;
-      background: var(--bg-secondary);
-      border-top: 1px solid var(--border-primary);
-      flex-shrink: 0;
-      font-size: 11px;
-      font-family: 'JetBrains Mono', monospace;
-      position: relative;
-      z-index: 10;
-    }
-
-    .statusbar-section {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-
-    .status-item {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      color: var(--text-muted);
-      transition: color 0.2s ease;
-    }
-
-    .status-item:hover {
-      color: var(--text-secondary);
-    }
-
-    .status-dot {
       width: 7px;
       height: 7px;
       border-radius: 50%;
@@ -271,563 +202,790 @@
       transition: all 0.3s ease;
     }
 
-    .status-dot.connected {
-      background: var(--accent-green);
-      box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
-      animation: pulse-dot 2s ease-in-out infinite;
+    .tab-dot.alive {
+      background: var(--green);
+      box-shadow: 0 0 6px rgba(52,211,153,0.6);
     }
 
-    .status-dot.disconnected {
-      background: var(--accent-red);
-      box-shadow: 0 0 8px rgba(248, 113, 113, 0.5);
+    .tab-dot.dead {
+      background: var(--red);
+      box-shadow: 0 0 6px rgba(248,113,113,0.4);
     }
 
-    @keyframes pulse-dot {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    .status-divider {
-      width: 1px;
-      height: 14px;
-      background: var(--border-primary);
-    }
-
-    .cache-badge {
-      padding: 1px 6px;
-      border-radius: 3px;
-      font-size: 10px;
-      font-weight: 600;
-      background: var(--accent-glow);
-      color: var(--accent-secondary);
-      border: 1px solid var(--border-primary);
-    }
-
-    /* ===== AI COMMAND PALETTE ===== */
-    .ai-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      z-index: 1000;
-      align-items: flex-start;
-      justify-content: center;
-      padding-top: 20vh;
-      animation: overlay-in 0.15s ease-out;
-    }
-
-    .ai-overlay.active {
-      display: flex;
-    }
-
-    @keyframes overlay-in {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
-    .ai-palette {
-      width: min(600px, 90vw);
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-glow);
-      border-radius: 12px;
-      box-shadow: var(--shadow-lg), var(--shadow-glow), 0 0 80px rgba(99, 102, 241, 0.06);
+    .tab-label {
       overflow: hidden;
-      animation: palette-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      text-overflow: ellipsis;
+      flex: 1;
     }
 
-    @keyframes palette-in {
-      from {
-        opacity: 0;
-        transform: translateY(-10px) scale(0.98);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-      }
-    }
-
-    .ai-palette-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--border-primary);
-    }
-
-    .ai-palette-icon {
+    .tab-close {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 28px;
-      height: 28px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, var(--accent-primary), var(--accent-cyan));
-      font-size: 14px;
-      box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3);
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      font-size: 13px;
+      line-height: 1;
+      color: var(--text-dim);
+      opacity: 0;
+      transition: all 0.15s ease;
       flex-shrink: 0;
-      animation: icon-glow 2s ease-in-out infinite alternate;
     }
 
-    @keyframes icon-glow {
-      from { box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3); }
-      to { box-shadow: 0 2px 20px rgba(99, 102, 241, 0.5); }
-    }
+    .tab:hover .tab-close { opacity: 1; color: var(--text-muted); }
+    .tab-close:hover { background: rgba(248,113,113,0.2); color: var(--red) !important; }
 
-    #ai-input {
-      flex: 1;
-      background: transparent;
+    .tab-add {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      min-width: 32px;
+      font-size: 16px;
+      color: var(--text-dim);
+      background: none;
       border: none;
-      color: var(--text-primary);
-      font-size: 15px;
-      font-family: 'JetBrains Mono', monospace;
-      font-weight: 400;
-      outline: none;
-      caret-color: var(--accent-primary);
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
     }
 
-    #ai-input::placeholder {
-      color: var(--text-muted);
-      font-family: 'Inter', sans-serif;
-      font-size: 14px;
+    .tab-add:hover {
+      color: var(--accent-light);
+      background: var(--bg-hover);
     }
 
-    .ai-palette-footer {
+    /* ============ TERMINAL AREA ============ */
+    .terminals-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: var(--terminal-bg);
+    }
+
+    .terminal-panel {
+      position: absolute;
+      inset: 0;
+      padding: 6px 0 0 10px;
+      display: none;
+    }
+
+    .terminal-panel.active {
+      display: block;
+    }
+
+    /* Scrollbar */
+    .xterm-viewport::-webkit-scrollbar { width: 6px; }
+    .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+    .xterm-viewport::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.15); border-radius: 3px; }
+    .xterm-viewport::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.3); }
+
+    /* ============ STATUS BAR ============ */
+    .statusbar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 16px;
-      background: rgba(0, 0, 0, 0.15);
+      padding: 0 12px;
+      height: 26px;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-subtle);
+      flex-shrink: 0;
       font-size: 11px;
-      color: var(--text-muted);
-      font-family: 'Inter', sans-serif;
+      font-family: var(--font-mono);
+      z-index: 40;
     }
 
-    .ai-palette-footer-keys {
+    .status-section {
       display: flex;
       align-items: center;
       gap: 12px;
     }
 
-    .ai-shortcut {
+    .status-item {
       display: flex;
       align-items: center;
       gap: 4px;
+      color: var(--text-muted);
     }
 
-    .ai-shortcut kbd {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      padding: 2px 5px;
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .status-dot.on {
+      background: var(--green);
+      box-shadow: 0 0 6px rgba(52,211,153,0.5);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .status-dot.off {
+      background: var(--red);
+    }
+
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .status-badge {
+      padding: 1px 6px;
       border-radius: 3px;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: var(--text-secondary);
+      font-size: 9.5px;
+      font-weight: 600;
+      background: var(--accent-glow);
+      color: var(--accent-light);
+      border: 1px solid var(--border-subtle);
     }
 
-    /* ===== AUTO-FIX TOAST ===== */
-    .toast-container {
+    .status-sep {
+      width: 1px;
+      height: 12px;
+      background: var(--border-subtle);
+    }
+
+    /* ============ AI COMMAND PALETTE ============ */
+    .palette-overlay {
+      display: none;
       position: fixed;
-      bottom: 40px;
-      right: 16px;
+      inset: 0;
+      background: rgba(6, 9, 15, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 1000;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 18vh;
+    }
+
+    .palette-overlay.open { display: flex; }
+
+    .palette {
+      width: min(560px, 88vw);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-accent);
+      border-radius: 14px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 60px rgba(99,102,241,0.08);
+      overflow: hidden;
+      animation: palette-enter 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes palette-enter {
+      from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .palette-input-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 18px;
+    }
+
+    .palette-sparkle {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, #6366f1, #06b6d4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 12px rgba(99,102,241,0.35);
+    }
+
+    .palette-input {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-size: 15px;
+      font-family: var(--font-mono);
+      outline: none;
+      caret-color: var(--accent);
+    }
+
+    .palette-input::placeholder {
+      color: var(--text-dim);
+      font-family: var(--font-ui);
+      font-size: 13.5px;
+    }
+
+    .palette-hints {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 18px;
+      background: rgba(0,0,0,0.2);
+      border-top: 1px solid var(--border-subtle);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .palette-hints-keys {
+      display: flex;
+      gap: 14px;
+    }
+
+    .palette-hints kbd {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--text-muted);
+      margin-right: 3px;
+    }
+
+    /* ============ THINKING BAR ============ */
+    .thinking {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      z-index: 60;
+      overflow: hidden;
+      display: none;
+    }
+
+    .thinking.active { display: block; }
+
+    .thinking-bar {
+      height: 100%;
+      width: 35%;
+      background: linear-gradient(90deg, transparent, var(--accent), var(--cyan), transparent);
+      animation: slide 1.1s ease-in-out infinite;
+      border-radius: 1px;
+    }
+
+    @keyframes slide {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(380%); }
+    }
+
+    /* ============ TOASTS ============ */
+    .toasts {
+      position: fixed;
+      bottom: 36px;
+      right: 14px;
       z-index: 500;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
+      pointer-events: none;
     }
 
     .toast {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 10px 16px;
-      background: var(--bg-glass);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid var(--border-primary);
-      border-radius: 10px;
-      box-shadow: var(--shadow-lg);
-      font-size: 12px;
-      font-family: 'Inter', sans-serif;
-      color: var(--text-primary);
-      animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-      max-width: 380px;
+      gap: 8px;
+      padding: 8px 14px;
+      background: rgba(17, 26, 46, 0.88);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--border-medium);
+      border-radius: 9px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      animation: toast-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: auto;
+      max-width: 340px;
     }
 
-    .toast.fade-out {
-      animation: toast-out 0.3s ease-in forwards;
-    }
+    .toast.out { animation: toast-out 0.2s ease forwards; }
+    .toast strong { color: var(--cyan); font-weight: 600; }
 
     @keyframes toast-in {
-      from {
-        opacity: 0;
-        transform: translateY(10px) scale(0.95);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-      }
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: none; }
     }
-
     @keyframes toast-out {
-      to {
-        opacity: 0;
-        transform: translateY(10px) scale(0.95);
-      }
+      to { opacity: 0; transform: translateX(20px); }
     }
 
-    .toast-icon {
-      font-size: 16px;
-      flex-shrink: 0;
-    }
-
-    .toast-text {
-      flex: 1;
-      line-height: 1.4;
-    }
-
-    .toast-text strong {
-      color: var(--accent-cyan);
-      font-weight: 600;
-    }
-
-    /* ===== LOADING PULSE ===== */
-    .ai-thinking {
+    /* ============ EMPTY STATE ============ */
+    .empty-state {
       display: none;
-      position: fixed;
-      top: 48px;
-      left: 0;
-      right: 0;
-      height: 2px;
-      z-index: 100;
-      overflow: hidden;
-    }
-
-    .ai-thinking.active {
-      display: block;
-    }
-
-    .ai-thinking-bar {
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       height: 100%;
-      width: 40%;
-      background: linear-gradient(90deg, transparent, var(--accent-primary), var(--accent-cyan), transparent);
-      animation: thinking-slide 1.2s ease-in-out infinite;
-      border-radius: 1px;
+      gap: 16px;
+      color: var(--text-dim);
+      font-size: 14px;
     }
 
-    @keyframes thinking-slide {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(350%); }
+    .empty-state.visible { display: flex; }
+
+    .empty-icon {
+      font-size: 48px;
+      opacity: 0.3;
+    }
+
+    .empty-btn {
+      margin-top: 8px;
+      padding: 8px 20px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(6,182,212,0.12));
+      border: 1px solid var(--border-medium);
+      color: var(--accent-light);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font-ui);
+      transition: all 0.2s;
+    }
+
+    .empty-btn:hover {
+      background: linear-gradient(135deg, rgba(99,102,241,0.3), rgba(6,182,212,0.2));
+      border-color: var(--border-accent);
     }
   </style>
 </head>
 <body>
 
   <!-- Header -->
-  <header class="header" id="header">
-    <div class="header-left">
-      <div class="logo">
-        <div class="logo-icon">⚡</div>
-        <span class="logo-text">AI Terminal</span>
-      </div>
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <span class="logo-text">AI Terminal</span>
     </div>
-    <div class="header-center">
-      <div class="tab active" id="tab-terminal">
-        <span class="tab-dot"></span>
-        Terminal
-      </div>
-    </div>
-    <div class="header-right">
-      <button class="header-btn" id="ai-trigger-btn" title="Open AI Command Palette">
-        ✨ Ask AI <kbd>Ctrl</kbd><kbd>Space</kbd>
-      </button>
+    <div class="header-actions">
+      <button class="btn-ai" id="btn-ai">✨ Ask AI <kbd>Ctrl</kbd><kbd>Space</kbd></button>
     </div>
   </header>
 
-  <!-- AI Thinking Indicator -->
-  <div class="ai-thinking" id="ai-thinking">
-    <div class="ai-thinking-bar"></div>
+  <!-- Tab Bar -->
+  <div class="tabbar" id="tabbar">
+    <!-- Tabs injected dynamically -->
+    <button class="tab-add" id="btn-add-tab" title="New Terminal (Alt+T)">+</button>
   </div>
 
-  <!-- Terminal -->
-  <div class="terminal-wrapper">
-    <div id="terminal"></div>
+  <!-- Thinking bar -->
+  <div class="thinking" id="thinking"><div class="thinking-bar"></div></div>
+
+  <!-- Terminal Panels -->
+  <div class="terminals-container" id="terminals-container">
+    <div class="empty-state visible" id="empty-state">
+      <div class="empty-icon">⚡</div>
+      <div>No terminals open</div>
+      <button class="empty-btn" id="btn-empty-new">+ New Terminal</button>
+    </div>
   </div>
 
   <!-- Status Bar -->
   <footer class="statusbar">
-    <div class="statusbar-section">
-      <div class="status-item" id="status-connection">
-        <span class="status-dot disconnected" id="status-dot"></span>
+    <div class="status-section">
+      <div class="status-item">
+        <span class="status-dot off" id="status-dot"></span>
         <span id="status-text">Connecting…</span>
       </div>
-      <div class="status-divider"></div>
-      <div class="status-item" id="status-os">
-        <span>🖥</span>
-        <span id="os-text">Detecting…</span>
-      </div>
+      <span class="status-sep"></span>
+      <div class="status-item">🖥 <span id="os-text">—</span></div>
     </div>
-    <div class="statusbar-section">
+    <div class="status-section">
+      <div class="status-item">🧠 Gemini Flash</div>
+      <span class="status-sep"></span>
       <div class="status-item">
-        <span>🧠</span>
-        <span>Gemini Flash</span>
-      </div>
-      <div class="status-divider"></div>
-      <div class="status-item" id="status-cache">
-        <span class="cache-badge" id="cache-badge">CACHE</span>
-        <span id="cache-text">Ready</span>
+        <span class="status-badge" id="term-count">0 terminals</span>
       </div>
     </div>
   </footer>
 
-  <!-- AI Command Palette Overlay -->
-  <div class="ai-overlay" id="ai-overlay">
-    <div class="ai-palette">
-      <div class="ai-palette-header">
-        <div class="ai-palette-icon">✨</div>
-        <input
-          type="text"
-          id="ai-input"
-          autocomplete="off"
-          spellcheck="false"
-          placeholder="Ask anything… e.g. 'install python and git'"
-        >
+  <!-- AI Palette -->
+  <div class="palette-overlay" id="palette-overlay">
+    <div class="palette">
+      <div class="palette-input-row">
+        <div class="palette-sparkle">✨</div>
+        <input class="palette-input" id="palette-input" autocomplete="off" spellcheck="false"
+          placeholder="Ask anything… e.g. 'install node and git'">
       </div>
-      <div class="ai-palette-footer">
-        <span>AI-powered command translation</span>
-        <div class="ai-palette-footer-keys">
-          <span class="ai-shortcut"><kbd>Enter</kbd> run</span>
-          <span class="ai-shortcut"><kbd>Esc</kbd> close</span>
+      <div class="palette-hints">
+        <span>Runs in active terminal</span>
+        <div class="palette-hints-keys">
+          <span><kbd>↵</kbd> run</span>
+          <span><kbd>Esc</kbd> close</span>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Toast Container -->
-  <div class="toast-container" id="toast-container"></div>
+  <!-- Toasts -->
+  <div class="toasts" id="toasts"></div>
 
   <script>
-    // ===== TERMINAL SETUP =====
-    const term = new Terminal({
-      cursorBlink: true,
-      cursorStyle: 'bar',
-      fontFamily: '"JetBrains Mono", "Cascadia Code", "Fira Code", monospace',
-      fontSize: 14,
-      fontWeight: '400',
-      fontWeightBold: '600',
-      lineHeight: 1.35,
-      letterSpacing: 0.5,
-      theme: {
-        background: '#0d1117',
-        foreground: '#e2e8f0',
-        cursor: '#6366f1',
-        cursorAccent: '#0d1117',
-        selectionBackground: 'rgba(99, 102, 241, 0.25)',
-        selectionForeground: '#ffffff',
-        black:   '#1e293b',
-        red:     '#f87171',
-        green:   '#34d399',
-        yellow:  '#fbbf24',
-        blue:    '#60a5fa',
-        magenta: '#c084fc',
-        cyan:    '#22d3ee',
-        white:   '#e2e8f0',
-        brightBlack:   '#475569',
-        brightRed:     '#fca5a5',
-        brightGreen:   '#6ee7b7',
-        brightYellow:  '#fde68a',
-        brightBlue:    '#93c5fd',
-        brightMagenta: '#d8b4fe',
-        brightCyan:    '#67e8f9',
-        brightWhite:   '#f8fafc',
+    // ===================================================================
+    // STATE
+    // ===================================================================
+    const terminals = []; // { sessionId, term, fitAddon, panelEl, tabEl }
+    let activeIdx = -1;
+    let isAiMode = false;
+    let isFirstTerminal = true;
+    const socket = io();
+
+    const terminalColors = ['#6366f1','#06b6d4','#f59e0b','#f43f5e','#8b5cf6','#10b981','#ec4899','#3b82f6'];
+
+    // ===================================================================
+    // DOM REFS
+    // ===================================================================
+    const $tabbar = document.getElementById('tabbar');
+    const $addBtn = document.getElementById('btn-add-tab');
+    const $container = document.getElementById('terminals-container');
+    const $empty = document.getElementById('empty-state');
+    const $palette = document.getElementById('palette-overlay');
+    const $paletteInput = document.getElementById('palette-input');
+    const $thinking = document.getElementById('thinking');
+    const $statusDot = document.getElementById('status-dot');
+    const $statusText = document.getElementById('status-text');
+    const $osText = document.getElementById('os-text');
+    const $termCount = document.getElementById('term-count');
+
+    // OS detect from UA
+    const ua = navigator.userAgent;
+    if (ua.includes('Win')) $osText.textContent = 'Windows';
+    else if (ua.includes('Mac')) $osText.textContent = 'macOS';
+    else if (ua.includes('Linux')) $osText.textContent = 'Linux';
+
+    // ===================================================================
+    // TERMINAL THEME
+    // ===================================================================
+    const termTheme = {
+      background: '#0a0f1a',
+      foreground: '#e2e8f0',
+      cursor: '#6366f1',
+      cursorAccent: '#0a0f1a',
+      selectionBackground: 'rgba(99,102,241,0.22)',
+      selectionForeground: '#ffffff',
+      black: '#1e293b', red: '#f87171', green: '#34d399', yellow: '#fbbf24',
+      blue: '#60a5fa', magenta: '#c084fc', cyan: '#22d3ee', white: '#e2e8f0',
+      brightBlack: '#475569', brightRed: '#fca5a5', brightGreen: '#6ee7b7', brightYellow: '#fde68a',
+      brightBlue: '#93c5fd', brightMagenta: '#d8b4fe', brightCyan: '#67e8f9', brightWhite: '#f8fafc',
+    };
+
+    // ===================================================================
+    // CREATE TERMINAL
+    // ===================================================================
+    function createTerminal() {
+      const idx = terminals.length;
+      const color = terminalColors[idx % terminalColors.length];
+
+      // Create panel div
+      const panel = document.createElement('div');
+      panel.className = 'terminal-panel';
+      $container.appendChild(panel);
+
+      // Create xterm
+      const term = new Terminal({
+        cursorBlink: true,
+        cursorStyle: 'bar',
+        fontFamily: '"JetBrains Mono", "Cascadia Code", monospace',
+        fontSize: 14,
+        fontWeight: '400',
+        fontWeightBold: '600',
+        lineHeight: 1.3,
+        letterSpacing: 0.4,
+        theme: termTheme,
+      });
+
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(panel);
+
+      // Create tab
+      const tab = document.createElement('button');
+      tab.className = 'tab';
+      tab.innerHTML = `
+        <span class="tab-dot alive" style="background:${color};box-shadow:0 0 6px ${color}"></span>
+        <span class="tab-label">Terminal ${idx + 1}</span>
+        <span class="tab-close" title="Close">×</span>
+      `;
+      $tabbar.insertBefore(tab, $addBtn);
+
+      const entry = { sessionId: null, term, fitAddon, panelEl: panel, tabEl: tab, color, alive: true };
+      terminals.push(entry);
+
+      // Tab click → switch
+      tab.addEventListener('click', (e) => {
+        if (e.target.classList.contains('tab-close')) return;
+        switchTo(terminals.indexOf(entry));
+      });
+
+      // Close button
+      tab.querySelector('.tab-close').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeTerminal(terminals.indexOf(entry));
+      });
+
+      // Input routing
+      term.onData(data => {
+        if (!isAiMode && entry.sessionId) {
+          socket.emit('input', { sessionId: entry.sessionId, data });
+        }
+      });
+
+      // Custom Key Handler for shortcuts (prevents xterm from eating them)
+      term.attachCustomKeyEventHandler(e => {
+        if (e.type !== 'keydown') return true;
+        
+        // Let xterm ignore these combinations so they can bubble up to our global document listener
+        if (e.ctrlKey && !e.altKey && e.code === 'Space') return false; // Ctrl+Space
+        if (e.altKey && !e.ctrlKey) {
+          if (['KeyT', 'KeyW', 'ArrowRight', 'ArrowLeft'].includes(e.code)) return false;
+          if (e.code >= 'Digit1' && e.code <= 'Digit9') return false;
+        }
+        return true;
+      });
+
+      // Resize
+      const ro = new ResizeObserver(() => {
+        if (terminals.indexOf(entry) === activeIdx) {
+          fitAddon.fit();
+        }
+      });
+      ro.observe(panel);
+
+      term.onResize(({ cols, rows }) => {
+        if (entry.sessionId) {
+          socket.emit('resize', { sessionId: entry.sessionId, cols, rows });
+        }
+      });
+
+      // Request server session
+      socket.emit('create-terminal', { cols: term.cols, rows: term.rows }, (resp) => {
+        entry.sessionId = resp.sessionId;
+        console.log(`Terminal ${idx + 1} → session ${resp.sessionId}`);
+      });
+
+      // Show welcome banner on the very first terminal
+      if (isFirstTerminal) {
+        isFirstTerminal = false;
+        const c = '\x1b[38;5;99m';   // indigo
+        const g = '\x1b[38;5;43m';   // green
+        const y = '\x1b[38;5;220m';  // yellow
+        const d = '\x1b[38;5;240m';  // dim
+        const w = '\x1b[97m';        // white
+        const r = '\x1b[0m';         // reset
+        const b = '\x1b[1m';         // bold
+
+        const banner = [
+          '',
+          `  ${c}${b}\u26a1 AI Terminal Engine${r}  ${d}v1.0.0${r}`,
+          `  ${d}\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501${r}`,
+          '',
+          `  ${g}\u2726${r} ${w}Self-healing${r} auto-fixer   ${d}\u2502${r}  Catches typos & errors`,
+          `  ${g}\u2726${r} ${w}Cross-platform${r} translator ${d}\u2502${r}  Ubuntu \u2192 Windows \u2192 macOS`,
+          `  ${g}\u2726${r} ${w}RAG-powered${r} context       ${d}\u2502${r}  Reads your project files`,
+          `  ${g}\u2726${r} ${w}Dual-cache${r} SQLite brain   ${d}\u2502${r}  Offline after first use`,
+          '',
+          `  ${d}Shortcuts:${r}`,
+          `  ${y}Ctrl+Space${r}  ${d}\u2192${r} Ask AI           ${y}Alt+T${r}     ${d}\u2192${r} New terminal`,
+          `  ${y}Alt+W${r}       ${d}\u2192${r} Close terminal   ${y}Alt+\u2190/\u2192${r}  ${d}\u2192${r} Switch tabs`,
+          `  ${y}Alt+1-9${r}     ${d}\u2192${r} Jump to tab`,
+          '',
+          `  ${d}\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501${r}`,
+          '',
+        ].join('\r\n');
+
+        term.write(banner);
+      }
+
+      // Switch to it
+      switchTo(idx);
+      updateCounts();
+
+      // Fit after layout settles
+      requestAnimationFrame(() => {
+        fitAddon.fit();
+      });
+
+      return entry;
+    }
+
+    // ===================================================================
+    // SWITCH / CLOSE
+    // ===================================================================
+    function switchTo(idx) {
+      if (idx < 0 || idx >= terminals.length) return;
+      activeIdx = idx;
+      terminals.forEach((t, i) => {
+        const isActive = i === idx;
+        t.panelEl.classList.toggle('active', isActive);
+        t.tabEl.classList.toggle('active', isActive);
+        if (isActive) {
+          requestAnimationFrame(() => {
+            t.fitAddon.fit();
+            t.term.focus();
+          });
+        }
+      });
+      $empty.classList.remove('visible');
+    }
+
+    function closeTerminal(idx) {
+      if (idx < 0 || idx >= terminals.length) return;
+      const entry = terminals[idx];
+
+      // Tell server
+      if (entry.sessionId) {
+        socket.emit('close-terminal', { sessionId: entry.sessionId });
+      }
+
+      // Cleanup DOM
+      entry.term.dispose();
+      entry.panelEl.remove();
+      entry.tabEl.remove();
+      terminals.splice(idx, 1);
+
+      // Switch to neighbour
+      if (terminals.length === 0) {
+        activeIdx = -1;
+        $empty.classList.add('visible');
+      } else {
+        switchTo(Math.min(idx, terminals.length - 1));
+      }
+      updateCounts();
+    }
+
+    function updateCounts() {
+      const n = terminals.length;
+      $termCount.textContent = `${n} terminal${n !== 1 ? 's' : ''}`;
+    }
+
+    // ===================================================================
+    // SERVER OUTPUT ROUTING
+    // ===================================================================
+    socket.on('output', ({ sessionId, data }) => {
+      const entry = terminals.find(t => t.sessionId === sessionId);
+      if (entry) {
+        entry.term.write(data);
+
+        // Auto-fix toast
+        if (data.includes('Auto-Fix Suggestion')) {
+          showToast('✨', data.includes('Cached') ? 'Fix from <strong>cache</strong>' : '<strong>AI fix</strong> suggested');
+        }
+
+        $thinking.classList.remove('active');
       }
     });
 
-    const fitAddon = new FitAddon.FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(document.getElementById('terminal'));
-
-    // Delay fit to ensure DOM is ready
-    requestAnimationFrame(() => {
-      fitAddon.fit();
+    socket.on('session-exited', ({ sessionId }) => {
+      const entry = terminals.find(t => t.sessionId === sessionId);
+      if (entry) {
+        entry.alive = false;
+        const dot = entry.tabEl.querySelector('.tab-dot');
+        dot.className = 'tab-dot dead';
+        dot.style.background = '';
+        dot.style.boxShadow = '';
+        entry.term.write('\r\n\x1b[90m[Process exited]\x1b[0m\r\n');
+      }
     });
 
-    // ===== SOCKET CONNECTION =====
-    const socket = io();
+    // ===================================================================
+    // AI PALETTE
+    // ===================================================================
+    function openPalette() {
+      isAiMode = true;
+      $palette.classList.add('open');
+      requestAnimationFrame(() => $paletteInput.focus());
+    }
 
-    const statusDot = document.getElementById('status-dot');
-    const statusText = document.getElementById('status-text');
-    const osText = document.getElementById('os-text');
-    const cacheText = document.getElementById('cache-text');
+    function closePalette() {
+      $paletteInput.value = '';
+      $palette.classList.remove('open');
+      isAiMode = false;
+      if (activeIdx >= 0) terminals[activeIdx].term.focus();
+    }
 
+    $paletteInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        const q = $paletteInput.value.trim();
+        if (q && activeIdx >= 0) {
+          const entry = terminals[activeIdx];
+          if (entry.sessionId) {
+            socket.emit('ai-request', { sessionId: entry.sessionId, query: q });
+            showToast('🧠', `Asking AI: <strong>${esc(q)}</strong>`);
+            $thinking.classList.add('active');
+            setTimeout(() => $thinking.classList.remove('active'), 10000);
+          }
+        }
+        closePalette();
+      } else if (e.key === 'Escape') {
+        closePalette();
+      }
+    });
+
+    $palette.addEventListener('click', e => { if (e.target === $palette) closePalette(); });
+
+    // ===================================================================
+    // SOCKET STATUS
+    // ===================================================================
     socket.on('connect', () => {
-      statusDot.className = 'status-dot connected';
-      statusText.textContent = 'Connected';
-      showToast('🔗', 'Connected to <strong>AI Terminal Engine</strong>');
+      $statusDot.className = 'status-dot on';
+      $statusText.textContent = 'Connected';
+
+      // Auto-create first terminal on first connect if none exist
+      if (terminals.length === 0) createTerminal();
     });
 
     socket.on('disconnect', () => {
-      statusDot.className = 'status-dot disconnected';
-      statusText.textContent = 'Disconnected';
-      showToast('⚠️', 'Connection lost. Reconnecting…');
+      $statusDot.className = 'status-dot off';
+      $statusText.textContent = 'Disconnected';
     });
 
-    // Listen for server metadata
-    socket.on('metadata', (data) => {
-      if (data.os) osText.textContent = data.os;
-    });
+    // ===================================================================
+    // BUTTON WIRING
+    // ===================================================================
+    $addBtn.addEventListener('click', () => createTerminal());
+    document.getElementById('btn-empty-new').addEventListener('click', () => createTerminal());
+    document.getElementById('btn-ai').addEventListener('click', () => openPalette());
 
-    // ===== RESIZE HANDLING =====
-    const resizeObserver = new ResizeObserver(() => {
-      fitAddon.fit();
-    });
-    resizeObserver.observe(document.getElementById('terminal'));
-
-    term.onResize(({ cols, rows }) => {
-      socket.emit('resize', { cols, rows });
-    });
-
-    // ===== INPUT ROUTING =====
-    let isAiMode = false;
-
-    term.onData(data => {
-      if (!isAiMode) {
-        socket.emit('input', data);
-      }
-    });
-
-    // ===== AI COMMAND PALETTE =====
-    const aiOverlay = document.getElementById('ai-overlay');
-    const aiInput = document.getElementById('ai-input');
-    const aiThinking = document.getElementById('ai-thinking');
-    const aiTriggerBtn = document.getElementById('ai-trigger-btn');
-
-    function openAiPalette() {
-      isAiMode = true;
-      aiOverlay.classList.add('active');
-      // Small delay so animation plays before focus
-      requestAnimationFrame(() => aiInput.focus());
-    }
-
-    function closeAiPalette() {
-      aiInput.value = '';
-      aiOverlay.classList.remove('active');
-      isAiMode = false;
-      term.focus();
-    }
-
-    // Trigger via Ctrl+Space in terminal
-    term.onKey(e => {
-      const ev = e.domEvent;
-      if (ev.ctrlKey && ev.code === 'Space') {
-        openAiPalette();
-        ev.preventDefault();
-      }
-    });
-
-    // Trigger via header button
-    aiTriggerBtn.addEventListener('click', () => {
-      openAiPalette();
-    });
-
-    // Close on overlay background click
-    aiOverlay.addEventListener('click', (e) => {
-      if (e.target === aiOverlay) closeAiPalette();
-    });
-
-    // Handle input in AI palette
-    aiInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const query = aiInput.value.trim();
-        if (query !== '') {
-          socket.emit('ai-request', query);
-          showToast('🧠', `Asking AI: <strong>${escapeHtml(query)}</strong>`);
-          aiThinking.classList.add('active');
-          // Hide thinking bar after a timeout (will be cancelled if response comes sooner)
-          setTimeout(() => aiThinking.classList.remove('active'), 10000);
-        }
-        closeAiPalette();
-      } else if (e.key === 'Escape') {
-        closeAiPalette();
-      }
-    });
-
-    // ===== TERMINAL OUTPUT =====
-    let lastOutputTime = 0;
-
-    socket.on('output', data => {
-      term.write(data);
-
-      // Detect auto-fix messages and show toast
-      if (data.includes('Auto-Fix Suggestion')) {
-        const isCached = data.includes('Cached');
-        showToast('✨', isCached
-          ? 'Auto-fix applied from <strong>cache</strong>'
-          : 'AI generated a <strong>fix suggestion</strong>'
-        );
-        cacheText.textContent = isCached ? 'Cache Hit' : 'API Call';
-        setTimeout(() => { cacheText.textContent = 'Ready'; }, 3000);
-      }
-
-      // Stop thinking indicator on any output after AI request
-      aiThinking.classList.remove('active');
-      lastOutputTime = Date.now();
-    });
-
-    // ===== DETECT OS =====
-    // Set OS display based on user agent (will be updated by server metadata if available)
-    const ua = navigator.userAgent;
-    if (ua.includes('Win')) osText.textContent = 'Windows';
-    else if (ua.includes('Mac')) osText.textContent = 'macOS';
-    else if (ua.includes('Linux')) osText.textContent = 'Linux';
-
-    // ===== TOAST NOTIFICATIONS =====
-    function showToast(icon, html) {
-      const container = document.getElementById('toast-container');
-      const toast = document.createElement('div');
-      toast.className = 'toast';
-      toast.innerHTML = `
-        <span class="toast-icon">${icon}</span>
-        <span class="toast-text">${html}</span>
-      `;
-      container.appendChild(toast);
-
-      // Auto-remove after 4s
-      setTimeout(() => {
-        toast.classList.add('fade-out');
-        setTimeout(() => toast.remove(), 300);
-      }, 4000);
-
-      // Keep max 3 toasts
-      while (container.children.length > 3) {
-        container.firstChild.remove();
-      }
-    }
-
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
-    }
-
-    // ===== GLOBAL KEYBOARD SHORTCUTS =====
-    document.addEventListener('keydown', (e) => {
-      // Ctrl+Space anywhere opens AI palette
-      if (e.ctrlKey && e.code === 'Space') {
+    // Global shortcuts (using Alt to avoid browser conflicts)
+    document.addEventListener('keydown', e => {
+      // Ctrl+Space → AI palette
+      if (e.ctrlKey && !e.altKey && e.code === 'Space') { e.preventDefault(); if (!isAiMode) openPalette(); }
+      // Escape → close palette
+      if (e.key === 'Escape' && isAiMode) closePalette();
+      // Alt+T → new terminal
+      if (e.altKey && !e.ctrlKey && e.code === 'KeyT') { e.preventDefault(); createTerminal(); }
+      // Alt+W → close active terminal
+      if (e.altKey && !e.ctrlKey && e.code === 'KeyW') { e.preventDefault(); if (activeIdx >= 0) closeTerminal(activeIdx); }
+      // Alt+ArrowRight → next terminal
+      if (e.altKey && !e.ctrlKey && e.code === 'ArrowRight' && terminals.length > 1) {
         e.preventDefault();
-        if (!isAiMode) openAiPalette();
+        switchTo((activeIdx + 1) % terminals.length);
       }
-      // Escape closes AI palette
-      if (e.key === 'Escape' && isAiMode) {
-        closeAiPalette();
+      // Alt+ArrowLeft → previous terminal
+      if (e.altKey && !e.ctrlKey && e.code === 'ArrowLeft' && terminals.length > 1) {
+        e.preventDefault();
+        switchTo((activeIdx - 1 + terminals.length) % terminals.length);
+      }
+      // Alt+1 through Alt+9 → jump to terminal N
+      if (e.altKey && !e.ctrlKey && e.code >= 'Digit1' && e.code <= 'Digit9') {
+        const n = parseInt(e.code.replace('Digit', '')) - 1;
+        if (n < terminals.length) { e.preventDefault(); switchTo(n); }
       }
     });
 
-    // ===== INITIAL FOCUS =====
-    window.addEventListener('load', () => {
-      term.focus();
-    });
+    // ===================================================================
+    // TOASTS
+    // ===================================================================
+    function showToast(icon, html) {
+      const box = document.getElementById('toasts');
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.innerHTML = `<span>${icon}</span><span>${html}</span>`;
+      box.appendChild(el);
+      setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 200); }, 3500);
+      while (box.children.length > 3) box.firstChild.remove();
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
   </script>
 </body>
 </html>
