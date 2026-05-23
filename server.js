@@ -365,13 +365,17 @@ io.on('connection', (socket) => {
         if (done) break;
         const textParts = extractTextFromStreamChunk(decoder.decode(value, { stream: true }));
         for (const t of textParts) {
-          session.pty.write(t);
           fullCmd += t;
         }
       }
 
+      // Clean the final command
       fullCmd = fullCmd.replace(/^```[a-z]*\n/gi, '').replace(/\n```$/g, '').trim();
+      // Remove any internal newlines or replace with space to prevent auto-execution
+      fullCmd = fullCmd.replace(/[\r\n]+/g, ' ');
+
       if (fullCmd) {
+        session.pty.write(fullCmd);
         saveTranslation.run(normalizedQuery, hostOS, fullCmd);
         console.log(`[CACHED]: "${normalizedQuery}" for '${hostOS}'`);
       }
