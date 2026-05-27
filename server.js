@@ -34,7 +34,9 @@ const defaultHome = isWindows ? process.env.USERPROFILE : process.env.HOME;
 // =====================================================================
 // --- 2. DUAL-CACHE SQLITE INITIALIZATION ---
 // =====================================================================
-const dbPath = path.join(__dirname, 'cache.db');
+// Removed the duplicate 'path' and 'os' requires from here!
+
+const dbPath = path.join(os.homedir(), '.aiterm_cache.db'); 
 const db = new Database(dbPath);
 
 db.exec(`
@@ -46,12 +48,25 @@ db.exec(`
     error_signature TEXT, os_name TEXT, fixed_command TEXT,
     PRIMARY KEY (error_signature, os_name)
   );
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
 `);
 
 const checkTranslation = db.prepare('SELECT command FROM translation_cache WHERE query = ? AND os_name = ?');
 const saveTranslation = db.prepare('INSERT OR REPLACE INTO translation_cache (query, os_name, command) VALUES (?, ?, ?)');
 const checkAutofix = db.prepare('SELECT fixed_command FROM autofix_cache WHERE error_signature = ? AND os_name = ?');
 const saveAutofix = db.prepare('INSERT OR REPLACE INTO autofix_cache (error_signature, os_name, fixed_command) VALUES (?, ?, ?)');
+const clearTranslationCache = db.prepare('DELETE FROM translation_cache');
+const clearAutofixCache = db.prepare('DELETE FROM autofix_cache');
+const getSetting = db.prepare('SELECT value FROM app_settings WHERE key = ?');
+const saveSetting = db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)');
+
+function getApiKey() {
+  const row = getSetting.get('GEMINI_API_KEY');
+  return row ? row.value : null;
+}
 
 // =====================================================================
 // --- 3. MULTI-SESSION PTY MANAGER ---
@@ -173,7 +188,7 @@ async function autoFixError(errorBuffer, currentDirectory, sessionId) {
     return;
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = getApiKey();
   if (!apiKey) { finishAutoFix(); return; }
 
   try {
@@ -260,6 +275,22 @@ function extractTextFromStreamChunk(chunkString) {
 io.on('connection', (socket) => {
   console.log('Frontend connected');
 
+  socket.on('check-api-key', () => {
+    const hasKey = !!getApiKey();
+    socket.emit('api-key-status', hasKey);
+  });
+
+  socket.on('save-api-key', (key) => {
+    saveSetting.run('GEMINI_API_KEY', key);
+    socket.emit('api-key-status', true);
+  });
+
+  socket.on('clear-ai-cache', () => {
+    clearTranslationCache.run();
+    clearAutofixCache.run();
+    socket.emit('ai-cache-cleared');
+  });
+
   // Create a terminal session
   socket.on('create-terminal', ({ cols, rows } = {}, callback) => {
     const session = createSession(cols || 80, rows || 30);
@@ -328,7 +359,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = getApiKey();
     if (!apiKey) {
       session.pty.write(`echo "Error: GEMINI_API_KEY missing"\r`);
       return;
@@ -339,7 +370,7 @@ io.on('connection', (socket) => {
       const localContext = await getLocalContext(query, currentDir);
       const augmentedQuery = `Context: Host OS is ${hostOS}.\nUser Query: ${query}${localContext}`;
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:streamGenerateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -356,18 +387,8 @@ io.on('connection', (socket) => {
         return;
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let fullCmd = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const textParts = extractTextFromStreamChunk(decoder.decode(value, { stream: true }));
-        for (const t of textParts) {
-          fullCmd += t;
-        }
-      }
+      const data = await response.json();
+      let fullCmd = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('') || '';
 
       // Clean the final command
       fullCmd = fullCmd.replace(/^```[a-z]*\n/gi, '').replace(/\n```$/g, '').trim();
@@ -390,28 +411,49 @@ io.on('connection', (socket) => {
   });
 });
 
+// // =====================================================================
+// // --- 8. EXPRESS SERVER STARTUP & AUTO-LAUNCH ---
+// // =====================================================================
+// app.use(express.static('public'));
+
+// const PORT = process.env.PORT || 3000;
+
+// server.listen(PORT, () => {
+//   console.log(`✨ AI Terminal Engine running on http://localhost:${PORT}`);
+
+//   const url = `http://localhost:${PORT}`;
+//   const startCommand = process.platform === 'darwin' ? 'open'
+//                      : process.platform === 'win32' ? 'start'
+//                      : 'xdg-open';
+
+//   exec(`${startCommand} ${url}`, (err) => {
+//     if (err) console.log(`[SYSTEM] Open ${url} manually.`);
+//     else console.log(`[SYSTEM] Auto-launching browser...`);
+//   });
+// });
+
+// // Cleanup all sessions on exit
+// process.on('exit', () => {
+//   for (const [id] of sessions) destroySession(id);
+// });
+
 // =====================================================================
-// --- 8. EXPRESS SERVER STARTUP & AUTO-LAUNCH ---
+// --- 8. EXPRESS SERVER STARTUP (ELECTRON READY) ---
 // =====================================================================
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
-  console.log(`✨ AI Terminal Engine running on http://localhost:${PORT}`);
-
-  const url = `http://localhost:${PORT}`;
-  const startCommand = process.platform === 'darwin' ? 'open'
-                     : process.platform === 'win32' ? 'start'
-                     : 'xdg-open';
-
-  exec(`${startCommand} ${url}`, (err) => {
-    if (err) console.log(`[SYSTEM] Open ${url} manually.`);
-    else console.log(`[SYSTEM] Auto-launching browser...`);
-  });
+  console.log(`✨ AI Terminal Engine running internally on http://localhost:${PORT}`);
+  
+  // NOTE: Browser auto-launch via child_process has been intentionally 
+  // removed. Electron's main.js will now handle creating the native window.
 });
 
-// Cleanup all sessions on exit
+// Cleanup all PTY sessions on exit
 process.on('exit', () => {
-  for (const [id] of sessions) destroySession(id);
+  for (const [id] of sessions) {
+      destroySession(id);
+  }
 });

@@ -546,6 +546,78 @@
       background: linear-gradient(135deg, rgba(99,102,241,0.3), rgba(6,182,212,0.2));
       border-color: var(--border-accent);
     }
+
+    /* ============ CLEAR CACHE MODAL ============ */
+    .confirm-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1100;
+      background: rgba(6, 9, 15, 0.68);
+      backdrop-filter: blur(10px);
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .confirm-overlay.open { display: flex; }
+
+    .confirm-card {
+      width: min(460px, 92vw);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-accent);
+      border-radius: 16px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+      padding: 18px 18px 16px;
+    }
+
+    .confirm-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .confirm-text {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-secondary);
+    }
+
+    .confirm-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .confirm-btn {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border-medium);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .confirm-btn:hover {
+      border-color: var(--border-accent);
+      background: var(--bg-elevated);
+    }
+
+    .confirm-btn.danger {
+      background: rgba(248, 113, 113, 0.12);
+      border-color: rgba(248, 113, 113, 0.28);
+      color: #fecaca;
+    }
+
+    .confirm-btn.danger:hover {
+      background: rgba(248, 113, 113, 0.18);
+      border-color: rgba(248, 113, 113, 0.4);
+    }
   </style>
 </head>
 <body>
@@ -558,6 +630,7 @@
     </div>
     <div class="header-actions">
       <button class="btn-ai" id="btn-ai">✨ Ask AI <kbd>Ctrl</kbd><kbd>Space</kbd></button>
+      <button class="btn-ai" id="btn-clear-cache" title="Clear AI command cache">🧹 Clear Cache</button>
     </div>
   </header>
 
@@ -569,6 +642,30 @@
 
   <!-- Thinking bar -->
   <div class="thinking" id="thinking"><div class="thinking-bar"></div></div>
+
+  <!-- API Key Modal -->
+  <div id="api-key-modal" style="display: none; position: absolute; top: 20px; right: 20px; background: rgba(20, 20, 20, 0.95); padding: 15px 20px; border: 1px solid #444; border-radius: 8px; z-index: 9999; color: #fff; font-family: monospace; backdrop-filter: blur(4px); box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+    <div style="font-weight: bold; margin-bottom: 8px; color: #00ffcc;">✨ Welcome to AI Terminal</div>
+    <label style="font-size: 12px; color: #aaa;">Enter your Gemini API Key to enable AI features:</label><br>
+    <div style="display: flex; gap: 8px; margin-top: 8px;">
+      <input type="password" id="api-key-input" placeholder="AIzaSy..." style="padding: 6px; width: 220px; background: #000; color: #0f0; border: 1px solid #555; border-radius: 4px; outline: none;">
+      <button id="api-key-save" style="padding: 6px 12px; background: #00ffcc; color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Save</button>
+    </div>
+  </div>
+
+  <!-- Clear Cache Confirm -->
+  <div class="confirm-overlay" id="clear-cache-modal" aria-hidden="true">
+    <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="clear-cache-title">
+      <div class="confirm-title" id="clear-cache-title">Clear AI cache?</div>
+      <div class="confirm-text">
+        This will delete cached command translations and auto-fixes from SQLite. Your saved Gemini API key will stay intact.
+      </div>
+      <div class="confirm-actions">
+        <button class="confirm-btn" id="clear-cache-cancel">Cancel</button>
+        <button class="confirm-btn danger" id="clear-cache-accept">Clear cache</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Terminal Panels -->
   <div class="terminals-container" id="terminals-container">
@@ -631,6 +728,14 @@
 
     const terminalColors = ['#6366f1','#06b6d4','#f59e0b','#f43f5e','#8b5cf6','#10b981','#ec4899','#3b82f6'];
 
+    function submitApiKey() {
+      const key = $apiKeyInput.value.trim();
+      if (key) {
+        socket.emit('save-api-key', key);
+        $apiKeyInput.value = '';
+      }
+    }
+
     // ===================================================================
     // DOM REFS
     // ===================================================================
@@ -645,6 +750,13 @@
     const $statusText = document.getElementById('status-text');
     const $osText = document.getElementById('os-text');
     const $termCount = document.getElementById('term-count');
+    const $clearCacheBtn = document.getElementById('btn-clear-cache');
+    const $clearCacheModal = document.getElementById('clear-cache-modal');
+    const $clearCacheCancel = document.getElementById('clear-cache-cancel');
+    const $clearCacheAccept = document.getElementById('clear-cache-accept');
+    const $apiKeyModal = document.getElementById('api-key-modal');
+    const $apiKeyInput = document.getElementById('api-key-input');
+    const $apiKeySave = document.getElementById('api-key-save');
 
     // OS detect from UA
     const ua = navigator.userAgent;
@@ -886,6 +998,27 @@
       }
     });
 
+    socket.on('api-key-status', (hasKey) => {
+      $apiKeyModal.style.display = hasKey ? 'none' : 'block';
+      if (!hasKey) {
+        requestAnimationFrame(() => $apiKeyInput.focus());
+      }
+    });
+
+    socket.on('ai-cache-cleared', () => {
+      showToast('🧹', 'AI command cache cleared');
+    });
+
+    function openClearCacheModal() {
+      $clearCacheModal.classList.add('open');
+      $clearCacheModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeClearCacheModal() {
+      $clearCacheModal.classList.remove('open');
+      $clearCacheModal.setAttribute('aria-hidden', 'true');
+    }
+
     // ===================================================================
     // AI PALETTE
     // ===================================================================
@@ -928,6 +1061,7 @@
     socket.on('connect', () => {
       $statusDot.className = 'status-dot on';
       $statusText.textContent = 'Connected';
+      socket.emit('check-api-key');
 
       // Auto-create first terminal on first connect if none exist
       if (terminals.length === 0) createTerminal();
@@ -944,6 +1078,19 @@
     $addBtn.addEventListener('click', () => createTerminal());
     document.getElementById('btn-empty-new').addEventListener('click', () => createTerminal());
     document.getElementById('btn-ai').addEventListener('click', () => openPalette());
+    $clearCacheBtn.addEventListener('click', openClearCacheModal);
+    $clearCacheCancel.addEventListener('click', closeClearCacheModal);
+    $clearCacheAccept.addEventListener('click', () => {
+      closeClearCacheModal();
+      socket.emit('clear-ai-cache');
+    });
+    $clearCacheModal.addEventListener('click', e => {
+      if (e.target === $clearCacheModal) closeClearCacheModal();
+    });
+    $apiKeySave.addEventListener('click', submitApiKey);
+    $apiKeyInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') submitApiKey();
+    });
 
     // Global shortcuts (using Alt to avoid browser conflicts)
     document.addEventListener('keydown', e => {
@@ -951,6 +1098,7 @@
       if (e.ctrlKey && !e.altKey && e.code === 'Space') { e.preventDefault(); if (!isAiMode) openPalette(); }
       // Escape → close palette
       if (e.key === 'Escape' && isAiMode) closePalette();
+      if (e.key === 'Escape' && $clearCacheModal.classList.contains('open')) closeClearCacheModal();
       // Alt+T → new terminal
       if (e.altKey && !e.ctrlKey && e.code === 'KeyT') { e.preventDefault(); createTerminal(); }
       // Alt+W → close active terminal

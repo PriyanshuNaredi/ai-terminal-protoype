@@ -1,19 +1,39 @@
 {
   "name": "ai-terminal",
   "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
+  "description": "Context-aware AI terminal emulator",
+  "main": "main.js",
   "bin": {
     "aiterm": "./server.js"
   },
   "scripts": {
+    "start": "electron .",
     "dev": "nodemon server.js",
+    "build:linux": "electron-builder --linux",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "postinstall": "electron-builder install-app-deps",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
+  "author": "Priyanshu Naredi <naredipriyanshu29@gmail.com>",
   "license": "ISC",
   "type": "commonjs",
+  "build": {
+    "appId": "com.naredi.aiterminal",
+    "productName": "AI Terminal",
+    "linux": {
+      "target": ["AppImage", "deb", "pacman"],
+      "category": "Utility"
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.developer-tools"
+    }
+  },
   "dependencies": {
     "@langchain/classic": "^1.0.34",
     "@langchain/core": "^1.1.48",
@@ -27,6 +47,8 @@
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^26.8.1",
     "nodemon": "^3.1.14"
   }
 }
