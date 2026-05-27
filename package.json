@@ -9,6 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "nodemon server.js",
+    "release": "electron-builder --linux --win --publish always",
     "build:linux": "electron-builder --linux",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
@@ -17,11 +18,18 @@
   },
   "keywords": [],
   "author": "Priyanshu Naredi <naredipriyanshu29@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PriyanshuNaredi/ai-terminal.git"
+  },
   "license": "ISC",
   "type": "commonjs",
   "build": {
     "appId": "com.naredi.aiterminal",
     "productName": "AI Terminal",
+    "publish": {
+      "provider": "github"
+    },
     "linux": {
       "target": ["AppImage", "deb", "pacman"],
       "category": "Utility"
