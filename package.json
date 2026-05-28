@@ -12,7 +12,7 @@
     "release": "electron-builder --linux --win --publish always",
     "build:linux": "electron-builder --linux",
     "build:win": "electron-builder --win",
-    "build:mac": "electron-builder --mac",
+    "build:mac": "electron-builder --mac zip",
     "postinstall": "electron-builder install-app-deps",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -38,7 +38,13 @@
       "target": ["nsis", "portable"]
     },
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        "zip"
+      ],
       "category": "public.app-category.developer-tools"
     }
   },
