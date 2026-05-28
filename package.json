@@ -1,6 +1,6 @@
 {
   "name": "ai-terminal",
-  "version": "1.0.7",
+  "version": "1.0.0",
   "description": "Context-aware AI terminal emulator",
   "main": "main.js",
   "bin": {

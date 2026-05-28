@@ -21,6 +21,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1000,
     height: 700,
+    icon: path.join(__dirname, 'build', 'icon.png'),
     backgroundColor: '#000000', // Matches your terminal vibe
     autoHideMenuBar: true,      // Hides the ugly default file menu
     menuBarVisible: false,
