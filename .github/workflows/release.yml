@@ -30,11 +30,12 @@ jobs:
           cache: 'npm'
 
       # FIX 2: Install Linux packaging tools (Only runs on the Ubuntu server)
+      # FIX 2: Install Linux packaging tools (Only runs on the Ubuntu server)
       - name: Install Linux Build Tools
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev rubygems build-essential rpm
+          sudo apt-get install -y ruby ruby-dev rubygems build-essential rpm libarchive-tools
           sudo gem install fpm
 
       - name: Install and Natively Compile Dependencies
