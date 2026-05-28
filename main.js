@@ -40,8 +40,7 @@ function createWindow() {
     mainWindow = null;
   });
 
-// 3. Point the native window to your local Express server
-  // Wrap the loader in an auto-retry loop to beat the race condition
+  // 3. Point the native window to your local Express server (with Auto-Retry)
   const loadUI = () => {
     mainWindow.loadURL('http://localhost:3000').catch((err) => {
       console.log('[ELECTRON] Server not ready yet, retrying in 250ms...');
@@ -67,35 +66,11 @@ function createWindow() {
     console.error('[ELECTRON] window became unresponsive');
   });
 
-  // 4. THE ULTIMATE DEBUGGER: Uncomment this for the next build!
-  // This will force the console window open inside the app so we can see any hidden errors.
-  mainWindow.webContents.openDevTools();
+  // Optional: Uncomment to force DevTools open for debugging
+  // mainWindow.webContents.openDevTools();
 }
 
-// When Electron is ready, open the window
-app.whenReady().then(() => {
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
-app.on('before-quit', () => {
-  console.log('[ELECTRON] before-quit');
-});
-
-app.on('will-quit', () => {
-  console.log('[ELECTRON] will-quit');
-});
-
-// Quit when all windows are closed (except on macOS)
-app.on('window-all-closed', () => {
-  console.log('[ELECTRON] window-all-closed');
-  if (process.platform !== 'darwin') app.quit();
-});
-
-// When Electron is ready, open the window
+// When Electron is ready, open the window (ONLY ONCE!)
 app.whenReady().then(() => {
   createWindow();
 
