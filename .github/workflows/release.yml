@@ -1,22 +1,20 @@
 name: Build and Release AI Terminal
 
-# This tells GitHub to ONLY run this script when you push a new version tag (like v1.0.0)
 on:
   push:
     tags:
       - 'v*'
 
-# We need to give the automated bot permission to upload files to the Releases page
 permissions:
   contents: write
 
 jobs:
   build:
     name: Build on ${{ matrix.os }}
-    # The Matrix Strategy: This tells GitHub to run this exact job 3 separate times, 
-    # simultaneously, on 3 different operating systems!
     runs-on: ${{ matrix.os }}
     strategy:
+      # This tells GitHub NOT to cancel Windows/Mac if Ubuntu fails
+      fail-fast: false 
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
@@ -24,21 +22,25 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v4
 
+      # FIX 1: Bumped to Node 24 to silence the deprecation warnings
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
 
+      # FIX 2: Install Linux packaging tools (Only runs on the Ubuntu server)
+      - name: Install Linux Build Tools
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev rubygems build-essential rpm
+          sudo gem install fpm
+
       - name: Install and Natively Compile Dependencies
-        # Because your package.json has the "postinstall" electron-builder script,
-        # this single command will trigger node-gyp to natively compile your 
-        # C++ files (SQLite and node-pty) specifically for the cloud runner's OS!
         run: npm install
 
       - name: Build and Publish
-        # We pass the built-in GitHub Token to electron-builder so it has the keys
-        # to upload the finished installers right back to your repository.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --publish always
